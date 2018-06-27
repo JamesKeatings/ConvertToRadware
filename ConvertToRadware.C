@@ -11,31 +11,28 @@
 		ConvertToRadware("inputfile.root")
 */
 
-#include "/home/jk/Legnaro/rootselectors/FullGalileo/GalileoSelector.h"
-#include "/home/jk/Legnaro/rootselectors/FullGalileo/GalTreeEvent.h"
-#include "/home/jk/Legnaro/rootselectors/FullGalileo/EuclTreeEvent.h"
-#include "/home/jk/Legnaro/rootselectors/FullGalileo/TACTreeEvent.h"
-#include "/home/jk/Legnaro/rootselectors/FullGalileo/NWTreeEvent.h"
+#include "/nucleardata1/jk/Ra/rootselectors/Selector/GalileoSelector.h"
+#include "/nucleardata1/jk/Ra/rootselectors/Selector/GalTreeEvent.h"
+#include "/nucleardata1/jk/Ra/rootselectors/Selector/EuclTreeEvent.h"
+#include "/nucleardata1/jk/Ra/rootselectors/Selector/TACTreeEvent.h"
+#include "/nucleardata1/jk/Ra/rootselectors/Selector/NWTreeEvent.h"
 
 //32768
-const int BLOCK_SIZE = 32000*8/16;	//32KB in 16b blocks (8b = 1B)
-void ConvertToRadware(string in, string out){
+const int BLOCK_SIZE = 32768*8/16;	//32KB in 16b blocks (8b = 1B)
+void ConvertToRadware2(int file){
 
 	cout << "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << endl;
 	cout << "		Running ConvertToRadware.C			" << endl;
 	cout << "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << endl << endl;
 
 	//OPENING FILES
-	TFile *infile= new TFile(in.c_str(),"READ");
-	if(infile->IsOpen()) cout << "Successfully opened input file " << in.c_str() << endl;
-	else { cerr << "Error opening input file " << in.c_str() << ". Cannot continue!" << endl; return; }
+	TFile *infile= new TFile(Form("/nucleardata1/jk/Ra/rootselectors/Selector/run_%i_selector.root",file),"READ");
+	if(infile->IsOpen()) cout << "Successfully opened input file run_" << file << "_selector.root" << endl;
+	else { cerr << "Error opening input file run_" << file << "_selector.root. Cannot continue!" << endl; return; }
 	ofstream outfile;
-	outfile.open(out.c_str());
-	if(outfile.is_open()) cout << "Successfully opened output file "<< out.c_str() << endl;
-	else{ cerr << "Error opening output file "<< out.c_str() <<". Cannot continue!" << endl; return; }
-	outfile2.open("text_spextra.dat");
-	if(outfile2.is_open()) cout << "Successfully opened text output file " << endl;
-	else{ cerr << "Error opening text outputfile. Cannot continue!" << endl; return; }
+	outfile.open(Form("/nucleardata1/jk/Ra/radwarefiles/%i.dat",file));
+	if(outfile.is_open()) cout << "Successfully opened output file "<< file << ".dat" << endl;
+	else{ cerr << "Error opening output file "<< file << ".dat. Cannot continue!" << endl; return; }
 
 	
 	//GETENTRIES AND INITIALISE TREEREADER
@@ -96,12 +93,11 @@ void ConvertToRadware(string in, string out){
 
 	int size = 0; 
 	int buffer_size = 0;
+	int zero = 0;
 	int mult = 0;
 	int freq = 2000;
 	int event_separator = 65535;
 	int tmp;
-	bool euclides_signal = 1;
-	bool neutronwall_signal = 1;
 
 	//LOOP OVER ALL TREES
 	cout << "\nBeginning to process events....." << endl;
@@ -111,25 +107,12 @@ void ConvertToRadware(string in, string out){
 			cout << 100*reader.GetCurrentEntry()/entries << "\% finished" << "	" << "Processing " << reader.GetCurrentEntry() << "/" << entries << "\r";
 
 		}
-		//CHECK FOR EUCLIDES AND NEUTRON WALL SIGNAL
-		if(EuclidesEvents_fE.GetSize() == 0){
-			euclides_signal = 0;
-		}
-		if(NeutronWallEvents_fZCO.GetSize() == 0){
-			neutronwall_signal = 0;
-		}
-		//GE T SIZE OF EVENT*
-		size = 4 + GalileoEvents_fEnergy.GetSize()*3 + EuclidesEvents_fE.GetSize()*4 + NeutronWallEvents_fZCO.GetSize()*3;
-		if(euclides_signal == 1){
-			size += 2;
-			size += EuclidesEvents_fE.GetSize()*4;
-		}
-		if(neutronwall_signal == 1){
-			size += 1;
-			size += NeutronWallEvents_fZCO.GetSize()*3;
-		}
+		//GET SIZE OF EVENT*
+		size = 0;
+		size = 8 + GalileoEvents_fEnergy.GetSize()*3 + EuclidesEvents_fE.GetSize()*4 + NeutronWallEvents_fZCO.GetSize()*4;
 		//CHECK BUFFER WILL FIT IN BLOC
-		//if(buffer_size + size <= BLOCK_SIZE){
+		if(buffer_size + size <= BLOCK_SIZE){
+			//cout << "size = " << size << "	buffer_size = " << buffer_size << endl;
 			buffer_size+=size;
 			//START NEW EVENT
 			//outfile.write((char*)&"ffff",sizeof(short int));
@@ -143,9 +126,7 @@ void ConvertToRadware(string in, string out){
 			for (int i = 0; i < GalileoEvents_fEnergy.GetSize(); i++){
 				//cout << GalileoEvents_fEnergyDC[i] << endl;
 				outfile.write((char*)&GalileoEvents_fChannel[i],sizeof(short int));
-				cout << &GalileoEvents_fChannel[i] << "		";
-				tmp = (int)rint(4*GalileoEvents_fEnergy[i]);
-				cout << GalileoEvents_fEnergy[i] << endl;
+				tmp = (int)rint(4*GalileoEvents_fEnergyDC[i]);
 				//cout << tmp << endl;
 				outfile.write((char*)&tmp,sizeof(short int));
 				outfile.write((char*)&GalileoEvents_fTimeStamp[i],sizeof(short int));
@@ -154,59 +135,53 @@ void ConvertToRadware(string in, string out){
 			//EUCLIDES MUTLIPLICITY
 			mult = EuclidesEvents_fE.GetSize();
 			outfile.write((char*)&mult,sizeof(short int));
-			if(euclides_signal == 1){
-				outfile.write((char*)&fMultProton,sizeof(short int));
-				outfile.write((char*)&fMultAlpha,sizeof(short int));
+			outfile.write((char*)&fMultProton,sizeof(short int));
+			outfile.write((char*)&fMultAlpha,sizeof(short int));
 
-				//SI ID, SI E, SI dE, SI T, & PID FOR EACH PARTICLE
-				for(int i = 0; i < EuclidesEvents_fE.GetSize(); i++){
-					outfile.write((char*)&EuclidesEvents_fChannel[i],sizeof(short int));
-					tmp = (int)rint(EuclidesEvents_fE[i]);
-					outfile.write((char*)&tmp,sizeof(short int));
-					tmp = (int)rint(EuclidesEvents_fDE[i]);
-					outfile.write((char*)&tmp,sizeof(short int));
-					outfile.write((char*)&EuclidesEvents_fTimeStamp[i],sizeof(short int));
-				}
+			//SI ID, SI E, SI dE, SI T, & PID FOR EACH PARTICLE
+			for(int i = 0; i < EuclidesEvents_fE.GetSize(); i++){
+				outfile.write((char*)&EuclidesEvents_fChannel[i],sizeof(short int));
+				tmp = (int)rint(EuclidesEvents_fE[i]);
+				outfile.write((char*)&tmp,sizeof(short int));
+				tmp = (int)rint(EuclidesEvents_fDE[i]);
+				outfile.write((char*)&tmp,sizeof(short int));
+				outfile.write((char*)&EuclidesEvents_fTimeStamp[i],sizeof(short int));
 			}
-
+	
 			//NW MUTLIPLICITY
 			mult = NeutronWallEvents_fZCO.GetSize();
 			outfile.write((char*)&mult,sizeof(short int));
-			if(neutronwall_signal == 1){
-				outfile.write((char*)&fMultNeutron,sizeof(short int));
-	
-				//NW E, NW ZCO, & GOOD/BAD FLAG FOR EACH NEUTRON
-				for(int i = 0; i < NeutronWallEvents_fZCO.GetSize(); i++){
-					tmp = (int)rint(NeutronWallEvents_fQVC[i]);
-					outfile.write((char*)&tmp,sizeof(short int));
-					tmp = (int)rint(NeutronWallEvents_fZCO[i]);
-					outfile.write((char*)&tmp,sizeof(short int));
-					tmp = (int)rint(NeutronWallEvents_fTOF[i]);
-					outfile.write((char*)&tmp,sizeof(short int));
-					//if(NeutronWallEvents_fQVC[i] > NeutronWallEvents_fZCO[i]) outfile.write((char*)&"1",sizeof(short int));
-					//else outfile.write((char*)&"0",sizeof(short int));
-				}
+			outfile.write((char*)&fMultNeutron,sizeof(short int));
+
+			//NW E, NW ZCO, & GOOD/BAD FLAG FOR EACH NEUTRON
+			for(int i = 0; i < NeutronWallEvents_fZCO.GetSize(); i++){
+				tmp = (int)rint(NeutronWallEvents_fQVC[i]);
+				outfile.write((char*)&tmp,sizeof(short int));
+				tmp = (int)rint(NeutronWallEvents_fZCO[i]);
+				outfile.write((char*)&tmp,sizeof(short int));
+				tmp = (int)rint(NeutronWallEvents_fChannel[i]);
+				outfile.write((char*)&tmp,sizeof(short int));
+				tmp = (int)rint(NeutronWallEvents_fTOF[i]);
+				outfile.write((char*)&tmp,sizeof(short int));
+				//if(NeutronWallEvents_fQVC[i] > NeutronWallEvents_fZCO[i]) outfile.write((char*)&"1",sizeof(short int));
+				//else outfile.write((char*)&"0",sizeof(short int));
 			}
 			//RESET SIZE
-			euclides_signal = 0;
-			neutronwall_signal = 0;
-			size = 0;
 
 		//IF NO ROOM IN BLOCK FOR NEXT EVENT END EVENT AND FILL BLANK SPACE WITH 0000
-		/*} else{
+		} else{
 			outfile.write((char*)&event_separator,sizeof(short int));
 			buffer_size++;
-			while(buffer_size < BLOCK_SIZE){
-				outfile.write((char*)&"0000",sizeof(short int));
-				buffer_size++;
+			for(int i = buffer_size; i < BLOCK_SIZE; i++){
+				outfile.write((char*)&zero,sizeof(short int));
 			}
 			//RESET BUFFER_SIZE
-			buffer_size = 0;	
-		}*/
+			buffer_size = 0;
+		}
 		if (buffer_size == BLOCK_SIZE) buffer_size = 0;
 	}
 	
-	cout << "\n\nFinished processing " << in.c_str() << "\nResults have been written to "<< out.c_str() << endl;
+	cout << "\n\nFinished processing run_" << file << "_selector.root\nResults have been written to "<< file << ".dat" << endl;
 	cout << "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << endl;
 	
 	return;
